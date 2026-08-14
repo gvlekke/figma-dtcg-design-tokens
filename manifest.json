@@ -1,0 +1,13 @@
+{
+  "name": "DTCG Design Tokens",
+  "id": "figma-dtcg-design-tokens",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/index.html",
+  "editorType": ["figma", "dev"],
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Pushes design tokens to a user-configured self-hosted GitLab instance via its REST API."
+  },
+  "documentAccess": "dynamic-page"
+}
