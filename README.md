@@ -133,3 +133,7 @@ Style Dictionary 5.5 reads these files, resolves cross-file references, and hand
 npm test        # conversion, resolver, diff, push planning, DTCG schema validation
 npm run typecheck
 ```
+
+## License
+
+[Apache License 2.0](LICENSE). You may use, modify and redistribute this project, including commercially, as long as you keep the copyright notice, the license text and the `NOTICE` file, and state the changes you made.

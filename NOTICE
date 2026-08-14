@@ -1,0 +1,8 @@
+figma-dtcg-design-tokens
+Copyright 2026 Glenn Vlekke
+
+This product includes software developed as a Figma plugin that exports
+Figma variables and styles as W3C DTCG design tokens and pushes them to a
+GitLab repository.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Figma plugin: export variables & styles as W3C DTCG design tokens and push them to a GitLab repository",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "npm run build:main && npm run build:ui",
     "build:main": "node esbuild.config.mjs",
