@@ -6,16 +6,25 @@ import type {
   StylesData,
   TextStyleData,
   VariableData,
-  VariableModeValue
+  VariableModeValue,
+  Warning
 } from "../types";
 import { rgbaToDtcgColor } from "./color";
 import { nameToPath, slugify, toReference } from "./names";
 import { buildResolver } from "./resolver";
 
-export const FIGMA_EXTENSION_KEY = "io.github.figma-dtcg-design-tokens";
+export const FIGMA_EXTENSION_KEY = "io.github.gvlekke.figma-dtcg-design-tokens";
 export const STYLES_ROOT_GROUP = "styles";
 export const STYLES_FILE = "styles.tokens.json";
 export const RESOLVER_FILE = "resolver.json";
+
+/**
+ * Number emitted for Figma "auto" line height. DTCG requires a numeric
+ * lineHeight, but auto (like CSS `normal`) depends on font metrics, so the
+ * token also carries `lineHeight: "auto"` in its extension for transforms
+ * that can emit `normal` instead.
+ */
+export const AUTO_LINE_HEIGHT_FALLBACK = 1.2;
 
 export interface TokenFile {
   /** Path relative to the configured base path, e.g. "colors/light.tokens.json" */
@@ -25,7 +34,7 @@ export interface TokenFile {
 
 export interface ConversionResult {
   files: TokenFile[];
-  warnings: string[];
+  warnings: Warning[];
 }
 
 type TokenNode = Record<string, unknown>;
@@ -75,13 +84,16 @@ function insertToken(
   root: TokenNode,
   path: string[],
   token: TokenNode,
-  warnings: string[]
+  warnings: Warning[]
 ): void {
   let node = root;
   for (const segment of path.slice(0, -1)) {
     const existing = node[segment];
     if (existing !== undefined && (typeof existing !== "object" || existing === null || "$value" in existing)) {
-      warnings.push(`Name collision at "${path.join("/")}": group clashes with an existing token, skipped`);
+      warnings.push({
+        message: "Name collisions where a group clashes with an existing token, skipped",
+        item: path.join("/")
+      });
       return;
     }
     if (existing === undefined) node[segment] = {};
@@ -89,7 +101,7 @@ function insertToken(
   }
   const leaf = path[path.length - 1];
   if (node[leaf] !== undefined) {
-    warnings.push(`Name collision at "${path.join("/")}": token already exists, skipped`);
+    warnings.push({ message: "Name collisions where the token already exists, skipped", item: path.join("/") });
     return;
   }
   node[leaf] = token;
@@ -98,11 +110,11 @@ function insertToken(
 function aliasToReference(
   id: string,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): string {
   const target = aliasTargets[id];
   if (!target) {
-    warnings.push(`Unresolved alias target ${id}; emitted placeholder reference`);
+    warnings.push({ message: "Unresolved alias targets, placeholder references emitted", item: id });
     return `{unresolved.${id}}`;
   }
   return toReference(slugify(target.collectionName), target.name);
@@ -112,10 +124,11 @@ function variableToToken(
   variable: VariableData,
   value: VariableModeValue,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): TokenNode {
   const token: TokenNode = {};
   let booleanAsString = false;
+  let autoLineHeight = false;
 
   if (value.kind === "alias") {
     token.$value = aliasToReference(value.id, aliasTargets, warnings);
@@ -150,6 +163,18 @@ function variableToToken(
           token.$value = { value: round(value.value), unit: "ms" };
           break;
         }
+        // Figma has no "auto" variable value; a non-positive line height is
+        // treated as the auto sentinel (e.g. -1) rather than exported literally.
+        if (variable.scopes.includes("LINE_HEIGHT") && value.value <= 0) {
+          token.$type = "number";
+          token.$value = AUTO_LINE_HEIGHT_FALLBACK;
+          autoLineHeight = true;
+          warnings.push({
+            message: `Line-height variables of 0 or less, treated as auto and exported as ${AUTO_LINE_HEIGHT_FALLBACK}`,
+            item: `${variable.name} (${value.value})`
+          });
+          break;
+        }
         const type = floatType(variable);
         token.$type = type;
         token.$value = type === "dimension" ? px(round(value.value)) : round(value.value);
@@ -163,9 +188,10 @@ function variableToToken(
         // so the value is stringified and the original type kept as an extension.
         token.$value = String(value.value);
         booleanAsString = true;
-        warnings.push(
-          `Variable "${variable.name}" is a boolean; exported as the string "${token.$value}" because DTCG has no boolean type`
-        );
+        warnings.push({
+          message: 'Boolean variables, exported as the strings "true" / "false" because DTCG has no boolean type',
+          item: variable.name
+        });
         break;
     }
   }
@@ -174,6 +200,7 @@ function variableToToken(
 
   const extensions: Record<string, unknown> = {};
   if (booleanAsString) extensions.originalType = "boolean";
+  if (autoLineHeight) extensions.lineHeight = "auto";
   const codeSyntaxEntries = Object.keys(variable.codeSyntax);
   if (codeSyntaxEntries.length > 0) extensions.codeSyntax = variable.codeSyntax;
   const meaningfulScopes = variable.scopes.filter((s) => s !== "ALL_SCOPES");
@@ -195,14 +222,18 @@ function collectionTree(
   collection: CollectionData,
   modeId: string,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): TokenNode {
   const rootGroup = slugify(collection.name);
   const tree: TokenNode = {};
   for (const variable of collection.variables) {
     const value = variable.valuesByMode[modeId];
     if (value === undefined) {
-      warnings.push(`Variable "${variable.name}" has no value for mode ${modeId}, skipped in that file`);
+      const modeName = collection.modes.find((m) => m.modeId === modeId)?.name ?? modeId;
+      warnings.push({
+        message: "Variables without a value for a mode, skipped in that mode's file",
+        item: `${variable.name} (mode "${modeName}")`
+      });
       continue;
     }
     insertToken(tree, nameToPath(variable.name), variableToToken(variable, value, aliasTargets, warnings), warnings);
@@ -214,12 +245,12 @@ function boundOrLiteral(
   boundVariableId: string | undefined,
   literal: unknown,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): unknown {
   if (!boundVariableId) return literal;
   const target = aliasTargets[boundVariableId];
   if (!target) {
-    warnings.push(`Style bound to unknown variable ${boundVariableId}; literal value used`);
+    warnings.push({ message: "Styles bound to unknown variables, literal values used", item: boundVariableId });
     return literal;
   }
   return toReference(slugify(target.collectionName), target.name);
@@ -228,7 +259,7 @@ function boundOrLiteral(
 function textStyleToToken(
   style: TextStyleData,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): TokenNode {
   const value: TokenNode = {
     fontFamily: boundOrLiteral(style.boundVariables.fontFamily, style.fontFamily, aliasTargets, warnings),
@@ -246,10 +277,14 @@ function textStyleToToken(
     )
   };
 
-  if (style.lineHeight.unit === "PERCENT" && style.lineHeight.value !== undefined) {
-    value.lineHeight = round(style.lineHeight.value / 100);
-  } else if (style.lineHeight.unit === "PIXELS" && style.lineHeight.value !== undefined) {
-    value.lineHeight = style.fontSize > 0 ? round(style.lineHeight.value / style.fontSize) : 1;
+  const { unit, value: lineHeight } = style.lineHeight;
+  const autoLineHeight = unit === "AUTO" || lineHeight === undefined || lineHeight <= 0;
+  if (autoLineHeight) {
+    value.lineHeight = AUTO_LINE_HEIGHT_FALLBACK;
+  } else if (unit === "PERCENT") {
+    value.lineHeight = round(lineHeight / 100);
+  } else {
+    value.lineHeight = style.fontSize > 0 ? round(lineHeight / style.fontSize) : 1;
   }
   if (style.boundVariables.lineHeight) {
     value.lineHeight = boundOrLiteral(style.boundVariables.lineHeight, value.lineHeight, aliasTargets, warnings);
@@ -257,16 +292,20 @@ function textStyleToToken(
 
   const token: TokenNode = { $type: "typography", $value: value };
   if (style.description) token.$description = style.description;
+  // A bound variable carries its own auto marker, so only literal auto is flagged here.
+  if (autoLineHeight && !style.boundVariables.lineHeight) {
+    token.$extensions = { [FIGMA_EXTENSION_KEY]: { lineHeight: "auto" } };
+  }
   return token;
 }
 
 function paintStyleToToken(
   style: PaintStyleData,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): TokenNode | null {
   if (!style.paint) {
-    warnings.push(`Paint style "${style.name}" has no exportable paint, skipped`);
+    warnings.push({ message: "Paint styles without an exportable paint, skipped", item: style.name });
     return null;
   }
   const token: TokenNode = {};
@@ -295,7 +334,7 @@ function paintStyleToToken(
 function stylesTree(
   styles: StylesData,
   aliasTargets: Record<string, AliasTarget>,
-  warnings: string[]
+  warnings: Warning[]
 ): TokenNode | null {
   const typography: TokenNode = {};
   const shadow: TokenNode = {};
@@ -308,7 +347,7 @@ function stylesTree(
   for (const style of styles.effect) {
     if (style.shadows.length === 0) {
       if (style.skippedEffectTypes.length > 0) {
-        warnings.push(`Effect style "${style.name}" contains no shadow effects, skipped`);
+        warnings.push({ message: "Effect styles without shadow effects, skipped", item: style.name });
       }
       continue;
     }
@@ -349,7 +388,7 @@ export function collectionHasAliases(collection: CollectionData): boolean {
 
 /** Convert the full export to DTCG token files + resolver.json (paths relative to base path). */
 export function convertExport(data: ExportData): ConversionResult {
-  const warnings: string[] = [];
+  const warnings: Warning[] = [];
   const files: TokenFile[] = [];
 
   for (const collection of data.collections) {

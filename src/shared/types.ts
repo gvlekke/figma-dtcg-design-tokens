@@ -104,13 +104,22 @@ export interface StylesData {
   paint: PaintStyleData[];
 }
 
+/**
+ * A warning split into a fixed message and the variable, style or token it is
+ * about, so the UI can list each message once with all affected items.
+ */
+export interface Warning {
+  message: string;
+  item: string;
+}
+
 export interface ExportData {
   fileName: string;
   collections: CollectionData[];
   aliasTargets: Record<string, AliasTarget>;
   styles: StylesData;
   /** Warnings gathered while reading the Figma document */
-  warnings: string[];
+  warnings: Warning[];
 }
 
 /** GitLab connection + push settings, persisted via figma.clientStorage */

@@ -26,7 +26,7 @@ StyleDictionary.registerTransform({
       const color = stop.color.hex ?? stop.color;
       return `${color} ${Math.round(stop.position * 100)}%`;
     });
-    const figmaType = token.$extensions?.["io.github.figma-dtcg-design-tokens"]?.gradientType;
+    const figmaType = token.$extensions?.["io.github.gvlekke.figma-dtcg-design-tokens"]?.gradientType;
     const fn = figmaType && figmaType !== "GRADIENT_LINEAR" ? "radial-gradient" : "linear-gradient";
     return `${fn}(${stops.join(", ")})`;
   }

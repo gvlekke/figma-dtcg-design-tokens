@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import type { ConversionResult } from "../../shared/dtcg/convert";
 import type { ExportData } from "../../shared/types";
+import { groupWarnings } from "../../shared/warnings";
 import { serializeFile } from "../push";
 
 interface Props {
@@ -37,7 +38,7 @@ export function ExportPanel({ data, conversion, loading, onReload }: Props) {
     );
   }
 
-  const warnings = [...data.warnings, ...conversion.warnings];
+  const warningGroups = groupWarnings([...data.warnings, ...conversion.warnings]);
   const variableCount = data.collections.reduce((sum, c) => sum + c.variables.length, 0);
   const styleCount = data.styles.text.length + data.styles.effect.length + data.styles.paint.length;
 
@@ -72,14 +73,33 @@ export function ExportPanel({ data, conversion, loading, onReload }: Props) {
         </ul>
       </div>
 
-      {warnings.length > 0 && (
+      {warningGroups.length > 0 && (
         <details class="banner warning">
-          <summary>{warnings.length} conversion warnings</summary>
+          <summary>{warningGroups.length} conversion warnings</summary>
           <div>
             <ul class="list">
-              {warnings.map((warning, index) => (
-                <li key={index}>{warning}</li>
-              ))}
+              {warningGroups.map((group) =>
+                group.items.length === 1 ? (
+                  <li key={group.message}>
+                    {group.message}: <span class="mono">{group.items[0]}</span>
+                  </li>
+                ) : (
+                  <li key={group.message}>
+                    <details>
+                      <summary>
+                        {group.message} ({group.items.length})
+                      </summary>
+                      <div>
+                        <ul class="list mono">
+                          {group.items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </details>
+                  </li>
+                )
+              )}
             </ul>
           </div>
         </details>

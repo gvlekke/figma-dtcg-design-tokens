@@ -3,6 +3,7 @@ import { convertExport, fontStyleToWeight } from "../convert";
 import { rgbaToDtcgColor } from "../color";
 import { nameToPath, slugify, toReference } from "../names";
 import { diffTokenFile, flattenTokens } from "../diff";
+import { groupWarnings } from "../../warnings";
 import { makeFixture } from "./fixtures";
 
 function fileByPath(result: ReturnType<typeof convertExport>, path: string) {
@@ -82,7 +83,7 @@ describe("convertExport", () => {
     expect(token.$value.hex).toBe("#0066cc");
     expect(token.$value.colorSpace).toBe("srgb");
     expect(token.$description).toBe("Brand blue");
-    expect(token.$extensions["io.github.figma-dtcg-design-tokens"].codeSyntax.WEB).toBe("var(--blue-500)");
+    expect(token.$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].codeSyntax.WEB).toBe("var(--blue-500)");
   });
 
   it("types floats by scope: dimension / number / fontWeight", () => {
@@ -125,8 +126,8 @@ describe("convertExport", () => {
     const flag = get(prim, ["primitives", "feature", "rounded"]);
     expect(flag.$value).toBe("true");
     expect(flag.$type).toBeUndefined();
-    expect(flag.$extensions["io.github.figma-dtcg-design-tokens"].originalType).toBe("boolean");
-    expect(result.warnings.some((w) => w.includes("feature/rounded"))).toBe(true);
+    expect(flag.$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].originalType).toBe("boolean");
+    expect(result.warnings.some((w) => w.item === "feature/rounded")).toBe(true);
   });
 
   it("converts aliases to DTCG references across collections", () => {
@@ -153,6 +154,41 @@ describe("convertExport", () => {
     expect(token.$value.lineHeight).toBe(1.25);
   });
 
+  it("exports auto line height as the numeric fallback with an auto marker", () => {
+    const data = makeFixture();
+    data.styles.text.push({
+      ...data.styles.text[0],
+      id: "s-body",
+      name: "body/md",
+      lineHeight: { unit: "AUTO" },
+      boundVariables: {}
+    });
+    const styles = fileByPath(convertExport(data), "styles.tokens.json").content;
+    const token = get(styles, ["styles", "typography", "body", "md"]);
+    expect(token.$value.lineHeight).toBe(1.2);
+    expect(token.$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].lineHeight).toBe("auto");
+    const heading = get(styles, ["styles", "typography", "heading", "xl"]);
+    expect(heading.$extensions).toBeUndefined();
+  });
+
+  it("treats a non-positive line-height variable as auto", () => {
+    const data = makeFixture();
+    data.collections[0].variables.push({
+      id: "v-lh-auto",
+      name: "line-height/auto",
+      description: "",
+      resolvedType: "FLOAT",
+      scopes: ["LINE_HEIGHT"],
+      codeSyntax: {},
+      valuesByMode: { "m-default": { kind: "float", value: -1 } }
+    });
+    const result = convertExport(data);
+    const token = get(fileByPath(result, "primitives.tokens.json").content, ["primitives", "line-height", "auto"]);
+    expect(token).toMatchObject({ $type: "number", $value: 1.2 });
+    expect(token.$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].lineHeight).toBe("auto");
+    expect(result.warnings.some((w) => w.item === "line-height/auto (-1)")).toBe(true);
+  });
+
   it("converts effect styles to shadow arrays with inset for inner shadows", () => {
     const styles = fileByPath(result, "styles.tokens.json").content;
     const token = get(styles, ["styles", "shadow", "elevation", "2"]);
@@ -171,7 +207,7 @@ describe("convertExport", () => {
     expect(gradient.$type).toBe("gradient");
     expect(gradient.$value).toHaveLength(2);
     expect(gradient.$value[1].position).toBe(1);
-    expect(gradient.$extensions["io.github.figma-dtcg-design-tokens"].gradientType).toBe("GRADIENT_RADIAL");
+    expect(gradient.$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].gradientType).toBe("GRADIENT_RADIAL");
   });
 
   it("builds a resolver with sets, modifiers and resolution order", () => {
@@ -195,7 +231,23 @@ describe("convertExport", () => {
 
   it("only warns about the unrepresentable boolean variable", () => {
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain("boolean");
+    expect(result.warnings[0].message).toContain("Boolean");
+  });
+});
+
+describe("groupWarnings", () => {
+  it("groups by message in first-seen order and drops duplicate items", () => {
+    expect(
+      groupWarnings([
+        { message: "a", item: "x" },
+        { message: "b", item: "y" },
+        { message: "a", item: "z" },
+        { message: "a", item: "x" }
+      ])
+    ).toEqual([
+      { message: "a", items: ["x", "z"] },
+      { message: "b", items: ["y"] }
+    ]);
   });
 });
 

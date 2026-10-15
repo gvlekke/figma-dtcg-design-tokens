@@ -4,10 +4,11 @@ import type {
   PaintStyleData,
   ShadowEffectData,
   StylesData,
-  TextStyleData
+  TextStyleData,
+  Warning
 } from "../shared/types";
 
-function readTextStyles(styles: TextStyle[], warnings: string[]): TextStyleData[] {
+function readTextStyles(styles: TextStyle[], warnings: Warning[]): TextStyleData[] {
   return styles.map((s) => {
     const bound: TextStyleData["boundVariables"] = {};
     const bv = s.boundVariables ?? {};
@@ -16,7 +17,10 @@ function readTextStyles(styles: TextStyle[], warnings: string[]): TextStyleData[
       if (alias && !Array.isArray(alias)) bound[key] = alias.id;
     }
     if (s.letterSpacing.unit !== "PIXELS" && s.letterSpacing.unit !== "PERCENT") {
-      warnings.push(`Text style "${s.name}": unexpected letterSpacing unit ${s.letterSpacing.unit}`);
+      warnings.push({
+        message: "Text styles with an unexpected letterSpacing unit, read as pixels",
+        item: `${s.name} (${s.letterSpacing.unit})`
+      });
     }
     return {
       id: s.id,
@@ -38,7 +42,7 @@ function readTextStyles(styles: TextStyle[], warnings: string[]): TextStyleData[
   });
 }
 
-function readEffectStyles(styles: EffectStyle[], warnings: string[]): EffectStyleData[] {
+function readEffectStyles(styles: EffectStyle[], warnings: Warning[]): EffectStyleData[] {
   return styles.map((s) => {
     const shadows: ShadowEffectData[] = [];
     const skipped = new Set<string>();
@@ -61,9 +65,10 @@ function readEffectStyles(styles: EffectStyle[], warnings: string[]): EffectStyl
       }
     }
     if (skipped.size > 0) {
-      warnings.push(
-        `Effect style "${s.name}": skipped effect types without a DTCG equivalent: ${[...skipped].join(", ")}`
-      );
+      warnings.push({
+        message: "Effect styles with effect types that have no DTCG equivalent, those effects skipped",
+        item: `${s.name} (${[...skipped].join(", ")})`
+      });
     }
     return {
       id: s.id,
@@ -75,7 +80,7 @@ function readEffectStyles(styles: EffectStyle[], warnings: string[]): EffectStyl
   });
 }
 
-function readPaintStyles(styles: PaintStyle[], warnings: string[]): PaintStyleData[] {
+function readPaintStyles(styles: PaintStyle[], warnings: Warning[]): PaintStyleData[] {
   return styles.map((s) => {
     let paint: PaintData | null = null;
     const skipped = new Set<string>();
@@ -110,7 +115,10 @@ function readPaintStyles(styles: PaintStyle[], warnings: string[]): PaintStyleDa
       }
     }
     if (skipped.size > 0) {
-      warnings.push(`Paint style "${s.name}": skipped paints: ${[...skipped].join(", ")}`);
+      warnings.push({
+        message: "Paint styles with unsupported paints, those paints skipped",
+        item: `${s.name} (${[...skipped].join(", ")})`
+      });
     }
     return {
       id: s.id,
@@ -122,7 +130,7 @@ function readPaintStyles(styles: PaintStyle[], warnings: string[]): PaintStyleDa
   });
 }
 
-export async function readStyles(warnings: string[]): Promise<StylesData> {
+export async function readStyles(warnings: Warning[]): Promise<StylesData> {
   const [text, effect, paint] = await Promise.all([
     figma.getLocalTextStylesAsync(),
     figma.getLocalEffectStylesAsync(),

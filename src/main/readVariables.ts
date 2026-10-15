@@ -2,7 +2,8 @@ import type {
   AliasTarget,
   CollectionData,
   VariableData,
-  VariableModeValue
+  VariableModeValue,
+  Warning
 } from "../shared/types";
 
 /**
@@ -15,6 +16,71 @@ const EASING_PRESET_BEZIERS: Record<string, [number, number, number, number]> = 
   EASE_OUT: [0, 0, 0.58, 1],
   EASE_IN_AND_OUT: [0.42, 0, 0.58, 1]
 };
+
+/** Figma color alias with an opacity override: `{ color: alias, opacity: 0-100 }` */
+interface AliasWithOpacity {
+  aliasId: string;
+  opacity: number;
+}
+
+function asAliasWithOpacity(value: unknown): AliasWithOpacity | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { color, opacity } = value as { color?: unknown; opacity?: unknown };
+  if (typeof opacity !== "number" || typeof color !== "object" || color === null) return null;
+  const alias = color as { type?: unknown; id?: unknown };
+  if (alias.type !== "VARIABLE_ALIAS" || typeof alias.id !== "string") return null;
+  return { aliasId: alias.id, opacity };
+}
+
+/**
+ * Follows an alias chain to a literal color. A target in the same collection
+ * is read in the same mode; a target in another collection is read in that
+ * collection's default mode, since there is no consumer to pick a mode from.
+ */
+async function resolveColor(
+  aliasId: string,
+  collectionId: string,
+  modeId: string,
+  warnings: Warning[],
+  variableName: string
+): Promise<{ r: number; g: number; b: number; a: number } | null> {
+  const seen = new Set<string>();
+  let id = aliasId;
+  let currentCollectionId = collectionId;
+  let currentModeId = modeId;
+  while (!seen.has(id)) {
+    seen.add(id);
+    const target = await figma.variables.getVariableByIdAsync(id);
+    if (!target) return null;
+    if (target.variableCollectionId !== currentCollectionId) {
+      const targetCollection = await figma.variables.getVariableCollectionByIdAsync(
+        target.variableCollectionId
+      );
+      if (!targetCollection) return null;
+      if (targetCollection.modes.length > 1) {
+        const defaultMode = targetCollection.modes.find(
+          (m) => m.modeId === targetCollection.defaultModeId
+        );
+        warnings.push({
+          message: "Opacity overrides on a source color with multiple modes, resolved using its default mode",
+          item: `${variableName} → ${target.name} (mode "${defaultMode?.name ?? targetCollection.defaultModeId}")`
+        });
+      }
+      currentCollectionId = target.variableCollectionId;
+      currentModeId = targetCollection.defaultModeId;
+    }
+    const raw = target.valuesByMode[currentModeId];
+    if (typeof raw === "object" && raw !== null && "r" in raw) {
+      return { r: raw.r, g: raw.g, b: raw.b, a: "a" in raw ? raw.a : 1 };
+    }
+    const isAlias =
+      typeof raw === "object" && raw !== null && "type" in raw && raw.type === "VARIABLE_ALIAS";
+    const next = isAlias ? raw.id : asAliasWithOpacity(raw)?.aliasId;
+    if (!next) return null;
+    id = next;
+  }
+  return null;
+}
 
 function serializeValue(value: VariableValue): VariableModeValue | null {
   if (typeof value === "boolean") return { kind: "boolean", value };
@@ -41,7 +107,7 @@ function serializeValue(value: VariableValue): VariableModeValue | null {
   return null;
 }
 
-export async function readVariables(warnings: string[]): Promise<{
+export async function readVariables(warnings: Warning[]): Promise<{
   collections: CollectionData[];
   aliasTargets: Record<string, AliasTarget>;
 }> {
@@ -78,11 +144,36 @@ export async function readVariables(warnings: string[]): Promise<{
     for (const v of byCollection.get(collection.id) ?? []) {
       const valuesByMode: Record<string, VariableModeValue> = {};
       for (const [modeId, raw] of Object.entries(v.valuesByMode)) {
+        const mode = collection.modes.find((m) => m.modeId === modeId);
+        const modeLabel = mode
+          ? `mode "${mode.name}" (${modeId})`
+          : `mode ${modeId} (not a mode of collection "${collection.name}")`;
+        const withOpacity = asAliasWithOpacity(raw);
+        if (withOpacity) {
+          const color = await resolveColor(
+            withOpacity.aliasId,
+            collection.id,
+            modeId,
+            warnings,
+            v.name
+          );
+          if (color) {
+            // Figma's opacity override is a percentage applied on top of the source alpha.
+            valuesByMode[modeId] = { kind: "color", ...color, a: color.a * (withOpacity.opacity / 100) };
+            continue;
+          }
+          warnings.push({
+            message: "Opacity overrides whose source color could not be resolved, skipped",
+            item: `${v.name} in ${modeLabel} (source ${withOpacity.aliasId})`
+          });
+          continue;
+        }
         const serialized = serializeValue(raw);
         if (!serialized) {
-          warnings.push(
-            `Variable "${v.name}" (${v.resolvedType}): value in mode ${modeId} has no DTCG equivalent, skipped`
-          );
+          warnings.push({
+            message: "Variable values without a DTCG equivalent, skipped",
+            item: `${v.name} (${v.resolvedType}) in ${modeLabel}: ${JSON.stringify(raw)}`
+          });
           continue;
         }
         if (serialized.kind === "alias" && !aliasTargets[serialized.id]) {
@@ -113,7 +204,10 @@ export async function readVariables(warnings: string[]): Promise<{
   for (const id of pendingAliasIds) {
     const target = await figma.variables.getVariableByIdAsync(id);
     if (!target) {
-      warnings.push(`Alias target ${id} could not be resolved; reference will be kept by id`);
+      warnings.push({
+        message: "Alias targets that could not be resolved, references kept by id",
+        item: id
+      });
       continue;
     }
     const targetCollection = await figma.variables.getVariableCollectionByIdAsync(
@@ -126,9 +220,10 @@ export async function readVariables(warnings: string[]): Promise<{
       remote: target.remote
     };
     if (target.remote) {
-      warnings.push(
-        `Variable alias points to library variable "${target.name}" which is not part of this export`
-      );
+      warnings.push({
+        message: "Aliases to library variables that are not part of this export",
+        item: target.name
+      });
     }
   }
 

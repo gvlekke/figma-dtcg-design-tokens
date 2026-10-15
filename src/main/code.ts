@@ -1,4 +1,4 @@
-import type { ExportData, MainToUiMessage, UiToMainMessage } from "../shared/types";
+import type { ExportData, MainToUiMessage, UiToMainMessage, Warning } from "../shared/types";
 import { readVariables } from "./readVariables";
 import { readStyles } from "./readStyles";
 import { loadSettings, savePat, saveSettings } from "./storage";
@@ -10,7 +10,7 @@ function post(message: MainToUiMessage): void {
 }
 
 async function exportTokens(): Promise<ExportData> {
-  const warnings: string[] = [];
+  const warnings: Warning[] = [];
   const { collections, aliasTargets } = await readVariables(warnings);
   const styles = await readStyles(warnings);
   return {
