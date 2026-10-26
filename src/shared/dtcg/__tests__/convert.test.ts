@@ -171,6 +171,45 @@ describe("convertExport", () => {
     expect(heading.$extensions).toBeUndefined();
   });
 
+  it("types font-family string variables and their aliases as fontFamily", () => {
+    const data = makeFixture();
+    data.collections[0].variables.push(
+      {
+        id: "v-font",
+        name: "font/family/brand",
+        description: "",
+        resolvedType: "STRING",
+        scopes: ["FONT_FAMILY"],
+        codeSyntax: {},
+        valuesByMode: { "m-default": { kind: "string", value: "FontName" } }
+      },
+      {
+        id: "v-font-alias",
+        name: "font/family/body",
+        description: "",
+        resolvedType: "STRING",
+        scopes: ["FONT_FAMILY"],
+        codeSyntax: {},
+        valuesByMode: { "m-default": { kind: "alias", id: "v-font" } }
+      }
+    );
+    data.aliasTargets["v-font"] = {
+      collectionId: "coll-prim",
+      collectionName: "Primitives",
+      name: "font/family/brand",
+      remote: false
+    };
+    const prim = fileByPath(convertExport(data), "primitives.tokens.json").content;
+    expect(get(prim, ["primitives", "font", "family", "brand"])).toMatchObject({
+      $type: "fontFamily",
+      $value: "FontName"
+    });
+    expect(get(prim, ["primitives", "font", "family", "body"])).toMatchObject({
+      $type: "fontFamily",
+      $value: "{primitives.font.family.brand}"
+    });
+  });
+
   it("treats a non-positive line-height variable as auto", () => {
     const data = makeFixture();
     data.collections[0].variables.push({

@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The plugin manifest uses the Figma-assigned plugin ID.
 - Conversion warnings are grouped by kind: each kind is listed once and expands to the affected variables, styles or tokens, without duplicates across modes. A kind with a single item is shown inline.
 - Warnings for variable values without a DTCG equivalent now name the mode and include the raw value.
+- String variables with the font-family scope (and aliases to them) are now exported as `$type: "fontFamily"` tokens instead of untyped strings, so tools that dispatch on `$type` recognise them as font families.
 
 ### Added
 

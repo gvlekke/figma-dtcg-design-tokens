@@ -87,7 +87,8 @@ Every generated file is validated against the official DTCG 2025.10 JSON schemas
 | Other FLOAT | `number` |
 | TIMING | `duration` in `ms` |
 | EASING | `cubicBezier` |
-| STRING | untyped `$value` string |
+| STRING with the font-family scope | `fontFamily` |
+| Other STRING | untyped `$value` string |
 | BOOLEAN | see limitations below |
 | Variable alias | reference such as `{primitives.blue.500}`, across collections too |
 | Variable description | `$description` |
@@ -113,7 +114,7 @@ Only files this plugin generates (`*.tokens.json` and `resolver.json`) are ever 
 
 - **Booleans.** DTCG has no boolean type, and its schema rejects untyped boolean values. Boolean variables are exported as the strings `"true"` / `"false"` with `$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].originalType: "boolean"`, and each one raises a warning.
 - **Auto line height.** DTCG requires a numeric `lineHeight`, while Figma's auto (like CSS `normal`) depends on the font. Auto line heights, and line-height variables of 0 or less such as `-1`, are exported as `1.2` with `$extensions["io.github.gvlekke.figma-dtcg-design-tokens"].lineHeight: "auto"`, so a transform can emit `line-height: normal` instead.
-- **Strings.** DTCG has no generic string type either. String variables are exported untyped, which the spec permits.
+- **Strings.** DTCG has no generic string type either. String variables are exported untyped, which the spec permits, except those with the font-family scope, which become `fontFamily` tokens.
 - **Percentage letter spacing.** DTCG `dimension` allows only `px` and `rem`, so percentage letter spacing is resolved against the style's own font size.
 - **Spring and "back" easings.** These have no cubic-bezier form and are skipped with a warning. Bezier presets and custom beziers convert fine.
 - **Library variables.** Aliases pointing at another file's library variables are emitted as references, but the target tokens are not part of this export. Each one raises a warning.

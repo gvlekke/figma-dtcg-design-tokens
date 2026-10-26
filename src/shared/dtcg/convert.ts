@@ -145,7 +145,10 @@ function variableToToken(
       case "EASING":
         token.$type = "cubicBezier";
         break;
-      // STRING/BOOLEAN have no DTCG type; the reference carries the value
+      case "STRING":
+        if (isFontFamily(variable)) token.$type = "fontFamily";
+        break;
+      // Other STRING/BOOLEAN have no DTCG type; the reference carries the value
     }
   } else {
     switch (value.kind) {
@@ -181,6 +184,7 @@ function variableToToken(
         break;
       }
       case "string":
+        if (isFontFamily(variable)) token.$type = "fontFamily";
         token.$value = value.value;
         break;
       case "boolean":
@@ -210,6 +214,11 @@ function variableToToken(
   }
 
   return token;
+}
+
+/** STRING variables with the font-family scope map to DTCG `fontFamily`. */
+function isFontFamily(variable: VariableData): boolean {
+  return variable.scopes.includes("FONT_FAMILY");
 }
 
 function floatType(variable: VariableData): "dimension" | "number" | "fontWeight" {
