@@ -153,6 +153,6 @@ export type UiToMainMessage =
   | { type: "notify"; message: string; error?: boolean };
 
 export type MainToUiMessage =
-  | { type: "settings"; settings: GitLabSettings; pat: string }
+  | { type: "settings"; settings: GitLabSettings; pat: string; mainBuildTime: string }
   | { type: "export-result"; data: ExportData }
   | { type: "export-error"; message: string };

@@ -2,6 +2,7 @@ import type { ExportData, MainToUiMessage, UiToMainMessage, Warning } from "../s
 import { readVariables } from "./readVariables";
 import { readStyles } from "./readStyles";
 import { loadSettings, savePat, saveSettings } from "./storage";
+import { buildTime } from "virtual:build-info";
 
 figma.showUI(__html__, { width: 480, height: 640, themeColors: true });
 
@@ -27,7 +28,7 @@ figma.ui.onmessage = async (message: UiToMainMessage) => {
     switch (message.type) {
       case "init": {
         const { settings, pat } = await loadSettings();
-        post({ type: "settings", settings, pat });
+        post({ type: "settings", settings, pat, mainBuildTime: buildTime });
         break;
       }
       case "export": {

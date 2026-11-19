@@ -5,6 +5,14 @@ import { onMainMessage, postToMain } from "./figmaBridge";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ExportPanel } from "./components/ExportPanel";
 import { PushPanel } from "./components/PushPanel";
+import { buildTime, version } from "virtual:build-info";
+
+/** Local "YYYY-MM-DD HH:MM:SS" for a build timestamp. */
+function formatBuildTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 type Tab = "export" | "push" | "settings";
 
@@ -15,6 +23,7 @@ export function App() {
   const [data, setData] = useState<ExportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mainBuildTime, setMainBuildTime] = useState<string | null>(null);
 
   useEffect(() => {
     const off = onMainMessage((message) => {
@@ -22,6 +31,7 @@ export function App() {
         case "settings":
           setSettings(message.settings);
           setPat(message.pat);
+          setMainBuildTime(message.mainBuildTime);
           break;
         case "export-result":
           setData(message.data);
@@ -98,6 +108,11 @@ export function App() {
           onPatChange={updatePat}
         />
       )}
+
+      <footer class="build-info muted mono">
+        v{version} · UI {formatBuildTime(buildTime)} · main{" "}
+        {mainBuildTime ? formatBuildTime(mainBuildTime) : "…"}
+      </footer>
     </>
   );
 }

@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `AGENTS.md` with project structure, commands, workflow and conventions for AI coding agents, and a `CLAUDE.md` that imports it.
 - Color variables that alias another color with an opacity override are exported as a literal color with the combined alpha. Aliases into another collection resolve in that collection's default mode, with a warning when it has multiple modes.
+- The plugin shows its version and the build times of its UI and main code in a footer, so you can check which build Figma has loaded after rebuilding.
 
 ## [0.1.0] - 2026-08-14
 
