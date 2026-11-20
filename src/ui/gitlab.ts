@@ -5,6 +5,7 @@ export interface GitLabProject {
   path_with_namespace: string;
   default_branch: string;
   web_url: string;
+  empty_repo?: boolean;
 }
 
 export interface TreeEntry {
@@ -113,9 +114,9 @@ export class GitLabClient {
     }
     switch (response.status) {
       case 401:
-        return "GitLab rejected the token (401). Check that the personal access token is valid and has the 'api' scope.";
+        return "GitLab rejected the token (401). Check that the access token is valid and not expired, and that it is a legacy token with the 'api' scope or a fine-grained token scoped to this project.";
       case 403:
-        return `GitLab denied the request (403). The token needs write access to this project${detail ? `: ${detail}` : "."}`;
+        return `GitLab denied the request (403). The token needs write access to this project (a fine-grained token may be missing a permission; see the README), and your role must allow the push${detail ? `: ${detail}` : "."}`;
       case 404:
         return "Project not found (404). Check the project id or path, and that the token can see this project.";
       default:

@@ -23,8 +23,25 @@ On the plugin's **Settings** tab:
 | --- | --- |
 | GitLab instance URL | e.g. `https://gitlab.example.com` — any host, since the manifest allows all domains |
 | Project | numeric project id, or the full path such as `design-system/tokens` |
-| Personal access token | needs the `api` scope; stored in `figma.clientStorage`, which is local to your Figma client |
+| Personal access token | fine-grained token with the permissions below, or a legacy token with the `api` scope; stored in `figma.clientStorage`, which is local to your Figma client |
 | Token directory | repo directory the files live in, default `tokens` |
+
+### Token permissions
+
+A [fine-grained personal access token](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens/) (GitLab 19.2+) is the least-privileged option. Scope it to the token project only, on the **Group and project** tab, and grant:
+
+| Category | Resource | Permission | Used for |
+| --- | --- | --- | --- |
+| Project | Project | Read | **Test connection** |
+| Repository | Repository | Read | comparing against the target branch (tree listing, file reads) |
+| Repository | Branch | Read | checking the target branch |
+| Repository | Commit | Create | the push commit |
+| Repository | Branch | Create | merge request flow only: the `figma-tokens/<timestamp>` branch |
+| Repository | Merge Request | Create | merge request flow only: opening the merge request |
+
+The plugin uses the REST API only, so **Code** (Git over HTTP) is not needed. Legacy personal, project and group access tokens need the `api` scope; `read_api` and `write_repository` are not enough.
+
+GitLab also checks your own role in the project: Developer is enough for the merge request flow, while committing straight to a protected branch requires Maintainer or being listed under *Allowed to push*.
 
 **Test connection** verifies the URL, project and token before you try to push.
 

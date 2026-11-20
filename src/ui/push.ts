@@ -26,6 +26,21 @@ export function serializeFile(file: TokenFile): string {
 }
 
 /**
+ * A missing target branch would otherwise look like an empty token directory
+ * and only fail at push time. The one exception is the first commit into an
+ * empty repo, which GitLab lets the commit flow create on any branch name.
+ */
+async function assertTargetBranch(client: GitLabClient, settings: GitLabSettings): Promise<void> {
+  const branch = settings.targetBranch.trim();
+  if (!branch) throw new Error("Set a target branch on the Push tab.");
+  if (await client.branchExists(branch)) return;
+  if (settings.flow === "commit" && (await client.getProject()).empty_repo) return;
+  throw new Error(
+    `Target branch '${branch}' does not exist in this project. Pick an existing branch on the Push tab, or create '${branch}' in GitLab first.`
+  );
+}
+
+/**
  * Compares the export against the repo state on the target branch:
  * per-file token diffs plus generated files that disappeared from Figma.
  */
@@ -34,6 +49,7 @@ export async function planPush(
   settings: GitLabSettings,
   files: TokenFile[]
 ): Promise<PlannedPush> {
+  await assertTargetBranch(client, settings);
   const basePath = settings.basePath.trim().replace(/^\/+|\/+$/g, "");
   const tree = await client.listTree(basePath, settings.targetBranch);
   const existing = new Set(

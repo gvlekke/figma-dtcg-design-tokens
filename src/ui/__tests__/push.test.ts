@@ -16,9 +16,14 @@ const settings: GitLabSettings = {
 const files = convertExport(makeFixture()).files;
 
 /** Minimal stand-in for GitLabClient: a virtual repo of raw file contents. */
-function fakeClient(repo: Record<string, string>) {
+function fakeClient(
+  repo: Record<string, string>,
+  { branches = ["main"], emptyRepo = false }: { branches?: string[]; emptyRepo?: boolean } = {}
+) {
   const tree: TreeEntry[] = Object.keys(repo).map((path) => ({ path, type: "blob" }));
   return {
+    branchExists: vi.fn(async (branch: string) => branches.includes(branch)),
+    getProject: vi.fn(async () => ({ empty_repo: emptyRepo })),
     listTree: vi.fn(async () => tree),
     getFileContent: vi.fn(async (path: string) => repo[path] ?? null),
     commit: vi.fn(async () => ({ id: "abc123", web_url: "https://gitlab.example.com/commit/abc123" })),
@@ -55,6 +60,24 @@ describe("planPush", () => {
     expect(plan.diffs.every((diff) => diff.status === "new")).toBe(true);
     expect(plan.deletions).toEqual([]);
     expect(client.getFileContent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a target branch that does not exist", async () => {
+    const client = fakeClient({}, { branches: ["main"] });
+    const missing = { ...settings, targetBranch: "test-tokens" };
+    await expect(planPush(client, { ...missing, flow: "mr" }, files)).rejects.toThrow(
+      "Target branch 'test-tokens' does not exist"
+    );
+    await expect(planPush(client, { ...missing, flow: "commit" }, files)).rejects.toThrow(
+      "Target branch 'test-tokens' does not exist"
+    );
+    expect(client.listTree).not.toHaveBeenCalled();
+  });
+
+  it("allows the first commit into an empty repo on a new branch", async () => {
+    const client = fakeClient({}, { branches: [], emptyRepo: true });
+    const plan = await planPush(client, { ...settings, flow: "commit" }, files);
+    expect(plan.hasChanges).toBe(true);
   });
 
   it("reports no changes when the repo already matches", async () => {

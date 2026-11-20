@@ -61,7 +61,7 @@ export function SettingsPanel({ settings, pat, onChange, onPatChange }: Props) {
 
       <label>
         Personal access token
-        <span class="hint">Needs the api scope. Stored only in your local Figma client storage.</span>
+        <span class="hint">Fine-grained token (see README for permissions) or legacy token with the api scope. Stored only in your local Figma client storage.</span>
         <input
           type="password"
           placeholder="glpat-…"

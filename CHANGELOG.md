@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The token hint in Settings, the 401 and 403 error messages and the README now cover GitLab fine-grained personal access tokens, and the README lists the exact permissions the plugin needs.
 - **Breaking:** the `$extensions` namespace is now `io.github.gvlekke.figma-dtcg-design-tokens` (was `io.github.figma-dtcg-design-tokens`). Transforms that read `codeSyntax`, `scopes`, `originalType` or `gradientType` from the old key need to be updated. The Style Dictionary example has been updated.
 - Text styles with auto line height now export `lineHeight: 1.2` with `$extensions[…].lineHeight: "auto"` instead of omitting `lineHeight`, so typography tokens always carry the value DTCG requires. Transforms can use the marker to emit `line-height: normal`.
 - Line-height variables (`LINE_HEIGHT` scope) with a value of 0 or less, such as `-1`, are treated as auto: exported as `1.2` with the same `"auto"` marker, instead of the literal value.
@@ -21,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `AGENTS.md` with project structure, commands, workflow and conventions for AI coding agents, and a `CLAUDE.md` that imports it.
 - Color variables that alias another color with an opacity override are exported as a literal color with the combined alpha. Aliases into another collection resolve in that collection's default mode, with a warning when it has multiple modes.
 - The plugin shows its version and the build times of its UI and main code in a footer, so you can check which build Figma has loaded after rebuilding.
+
+### Fixed
+
+- A target branch that does not exist in the project is now reported when comparing, with the branch name, instead of showing every file as new and then failing the push with GitLab's "invalid reference name" error.
 
 ## [0.1.0] - 2026-08-14
 
